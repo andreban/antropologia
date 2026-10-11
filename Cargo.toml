@@ -1,0 +1,22 @@
+[package]
+name = "antropologia"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "A lightweight, async Rust client for the Anthropic Claude API"
+
+[dependencies]
+reqwest = { version = "0.13.5", features = ["json", "stream"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tokio = { version = "1.53.2", features = ["sync"] }
+tokio-stream = "0.1.19"
+tokio-util = { version = "0.7.20", features = ["codec", "io"] }
+tracing = "0.1.44"
+
+[dev-dependencies]
+anyhow = "1.0.104"
+dotenvy = "0.15.7"
+tokio = { version = "1.53.2", features = ["full"] }
+wiremock = "0.6.5"
