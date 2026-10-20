@@ -1,6 +1,8 @@
 // Copyright 2026 Andre Cipriani Bandarra
 // SPDX-License-Identifier: Apache-2.0
 
+use std::time::Duration;
+
 use antropologia::prelude::*;
 use serde_json::json;
 use tokio_stream::StreamExt;
@@ -194,6 +196,46 @@ async fn invalid_urls_are_not_retryable() -> anyhow::Result<()> {
         .messages(&request())
         .await
         .expect_err("the URL is invalid");
+
+    assert!(matches!(err, AntropologiaError::Http(_)), "{err:?}");
+    assert!(!err.is_retryable());
+    Ok(())
+}
+
+#[tokio::test]
+async fn timeouts_are_retryable() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(1)))
+        .mount(&server)
+        .await;
+    let client = AntropologiaClient::builder("test-key")
+        .base_url(server.uri())
+        .timeout(Duration::from_millis(50))
+        .build();
+
+    let err = client
+        .messages(&request())
+        .await
+        .expect_err("the server answers after the timeout");
+
+    assert!(matches!(err, AntropologiaError::Http(_)), "{err:?}");
+    assert!(err.is_retryable());
+    Ok(())
+}
+
+#[tokio::test]
+async fn undecodable_responses_are_not_retryable() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+        .mount(&server)
+        .await;
+
+    let err = client(&server)
+        .messages(&request())
+        .await
+        .expect_err("the body isn't a message");
 
     assert!(matches!(err, AntropologiaError::Http(_)), "{err:?}");
     assert!(!err.is_retryable());
