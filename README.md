@@ -13,7 +13,7 @@ Named after *anthropology*, for Anthropic, following the naming tradition of [`g
 - **Lossless replay**: thinking blocks keep their signatures, and block types the crate doesn't model round-trip unchanged as raw JSON, so assistant turns can always be sent back as received.
 - **Structured output**: JSON Schema output; `json_schema` adds the `additionalProperties: false` the API requires.
 - **Prompt caching**: `cache_control` breakpoints, and cache read/write counts in `usage`.
-- **Errors**: API errors carry their type, message and request ID, and `is_retryable()` flags 429, 5xx and overload errors.
+- **Errors**: API errors carry their type, message and request ID, and `is_retryable()` flags 429, 5xx and overload errors, and failures to connect or timeouts.
 - **Small**: built on `reqwest`, `serde` and `tokio`.
 
 ## Quick Start

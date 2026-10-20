@@ -165,3 +165,37 @@ async fn messages_stream_turns_error_events_into_errors() -> anyhow::Result<()> 
     ));
     Ok(())
 }
+
+#[tokio::test]
+async fn connection_failures_are_retryable() -> anyhow::Result<()> {
+    // Bind and drop a listener so nothing is listening on the port.
+    let address = std::net::TcpListener::bind("127.0.0.1:0")?.local_addr()?;
+    let client = AntropologiaClient::builder("test-key")
+        .base_url(format!("http://{address}"))
+        .build();
+
+    let err = client
+        .messages(&request())
+        .await
+        .expect_err("nothing is listening");
+
+    assert!(matches!(err, AntropologiaError::Http(_)), "{err:?}");
+    assert!(err.is_retryable());
+    Ok(())
+}
+
+#[tokio::test]
+async fn invalid_urls_are_not_retryable() -> anyhow::Result<()> {
+    let client = AntropologiaClient::builder("test-key")
+        .base_url("http://[::1")
+        .build();
+
+    let err = client
+        .messages(&request())
+        .await
+        .expect_err("the URL is invalid");
+
+    assert!(matches!(err, AntropologiaError::Http(_)), "{err:?}");
+    assert!(!err.is_retryable());
+    Ok(())
+}

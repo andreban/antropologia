@@ -37,10 +37,11 @@ pub enum AntropologiaError {
 
 impl AntropologiaError {
     /// Whether retrying the same request may succeed: rate limits (429), server errors (5xx),
-    /// overload (529), and transport errors.
+    /// overload (529), and failures to connect or timeouts. Other transport errors, such as an
+    /// invalid URL or header, fail the same way every time.
     pub fn is_retryable(&self) -> bool {
         match self {
-            AntropologiaError::Http(_) => true,
+            AntropologiaError::Http(error) => error.is_connect() || error.is_timeout(),
             AntropologiaError::Api {
                 status, error_type, ..
             } => {
