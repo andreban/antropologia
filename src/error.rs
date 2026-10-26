@@ -30,7 +30,9 @@ pub enum AntropologiaError {
         message: String,
         /// The `request-id` header or `request_id` field, to quote when reporting issues.
         request_id: Option<String>,
-        /// The `retry-after` header, specifying how long to wait before retrying.
+        /// The `retry-after` header, in whole seconds, saying how long to wait before
+        /// retrying. `None` when the header is missing or not a whole number, and for
+        /// `error` events inside a stream.
         retry_after: Option<Duration>,
     },
 

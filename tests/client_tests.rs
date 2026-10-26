@@ -187,6 +187,41 @@ async fn api_errors_handle_unparsable_retry_after() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn api_errors_carry_retry_after_on_non_json_body() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(503)
+                .insert_header("retry-after", "30")
+                .set_body_string("Service Unavailable"),
+        )
+        .mount(&server)
+        .await;
+
+    let err = client(&server)
+        .messages(&request())
+        .await
+        .expect_err("a 503 is an error");
+
+    let AntropologiaError::Api {
+        status,
+        ref error_type,
+        ref message,
+        retry_after,
+        ..
+    } = err
+    else {
+        anyhow::bail!("expected an API error, got {err:?}");
+    };
+    assert_eq!(status.as_u16(), 503);
+    assert_eq!(error_type, "unknown");
+    assert_eq!(message, "Service Unavailable");
+    assert_eq!(retry_after, Some(Duration::from_secs(30)));
+    assert!(err.is_retryable());
+    Ok(())
+}
+
+#[tokio::test]
 async fn invalid_request_errors_are_not_retryable() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
