@@ -119,6 +119,7 @@ impl AntropologiaClient {
                 error_type,
                 message,
                 request_id: None,
+                retry_after: None,
             })),
             Ok(event) => Some(Ok(event)),
             Err(e) => {
@@ -139,6 +140,12 @@ impl AntropologiaClient {
             .get("request-id")
             .and_then(|v| v.to_str().ok())
             .map(str::to_owned);
+        let retry_after = response
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .map(Duration::from_secs);
         let body = response.text().await.unwrap_or_default();
         Err(match serde_json::from_str::<ErrorEnvelope>(&body) {
             Ok(envelope) => AntropologiaError::Api {
@@ -146,6 +153,7 @@ impl AntropologiaClient {
                 error_type: envelope.error.error_type,
                 message: envelope.error.message,
                 request_id: envelope.request_id.or(header_request_id),
+                retry_after,
             },
             Err(_) => AntropologiaError::Api {
                 status,
@@ -156,6 +164,7 @@ impl AntropologiaClient {
                     body
                 },
                 request_id: header_request_id,
+                retry_after,
             },
         })
     }

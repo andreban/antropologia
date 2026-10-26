@@ -3,6 +3,8 @@
 
 //! Error types for the Antropologia client.
 
+use std::time::Duration;
+
 use thiserror::Error;
 
 /// Errors returned by the Antropologia client.
@@ -28,6 +30,8 @@ pub enum AntropologiaError {
         message: String,
         /// The `request-id` header or `request_id` field, to quote when reporting issues.
         request_id: Option<String>,
+        /// The `retry-after` header, specifying how long to wait before retrying.
+        retry_after: Option<Duration>,
     },
 
     /// Streaming / SSE decoding error.

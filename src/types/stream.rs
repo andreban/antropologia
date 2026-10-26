@@ -240,6 +240,7 @@ impl MessageAccumulator {
                     error_type: error.error_type,
                     message: error.message,
                     request_id: None,
+                    retry_after: None,
                 });
             }
             StreamEvent::MessageStop | StreamEvent::Ping | StreamEvent::Other(_) => {}
