@@ -73,6 +73,7 @@ async fn api_errors_carry_type_message_and_request_id() -> anyhow::Result<()> {
         ref error_type,
         ref message,
         ref request_id,
+        retry_after,
     } = err
     else {
         anyhow::bail!("expected an API error, got {err:?}");
@@ -81,6 +82,141 @@ async fn api_errors_carry_type_message_and_request_id() -> anyhow::Result<()> {
     assert_eq!(error_type, "overloaded_error");
     assert_eq!(message, "Overloaded");
     assert_eq!(request_id.as_deref(), Some("req_123"));
+    assert_eq!(retry_after, None);
+    assert!(err.is_retryable());
+    Ok(())
+}
+
+#[tokio::test]
+async fn api_errors_carry_retry_after_on_429() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(429)
+                .insert_header("retry-after", "30")
+                .set_body_json(json!({
+                    "type": "error",
+                    "error": {"type": "rate_limit_error", "message": "Rate limited"}
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let err = client(&server)
+        .messages(&request())
+        .await
+        .expect_err("a 429 is an error");
+
+    let AntropologiaError::Api {
+        status,
+        ref error_type,
+        retry_after,
+        ..
+    } = err
+    else {
+        anyhow::bail!("expected an API error, got {err:?}");
+    };
+    assert_eq!(status.as_u16(), 429);
+    assert_eq!(error_type, "rate_limit_error");
+    assert_eq!(retry_after, Some(Duration::from_secs(30)));
+    assert!(err.is_retryable());
+    Ok(())
+}
+
+#[tokio::test]
+async fn api_errors_carry_retry_after_on_529() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(529)
+                .insert_header("retry-after", "5")
+                .set_body_json(json!({
+                    "type": "error",
+                    "error": {"type": "overloaded_error", "message": "Overloaded"}
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let err = client(&server)
+        .messages(&request())
+        .await
+        .expect_err("a 529 is an error");
+
+    let AntropologiaError::Api {
+        status,
+        ref error_type,
+        retry_after,
+        ..
+    } = err
+    else {
+        anyhow::bail!("expected an API error, got {err:?}");
+    };
+    assert_eq!(status.as_u16(), 529);
+    assert_eq!(error_type, "overloaded_error");
+    assert_eq!(retry_after, Some(Duration::from_secs(5)));
+    assert!(err.is_retryable());
+    Ok(())
+}
+
+#[tokio::test]
+async fn api_errors_handle_unparsable_retry_after() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(429)
+                .insert_header("retry-after", "not-a-number")
+                .set_body_json(json!({
+                    "type": "error",
+                    "error": {"type": "rate_limit_error", "message": "Rate limited"}
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let err = client(&server)
+        .messages(&request())
+        .await
+        .expect_err("a 429 is an error");
+
+    let AntropologiaError::Api { retry_after, .. } = err else {
+        anyhow::bail!("expected an API error, got {err:?}");
+    };
+    assert_eq!(retry_after, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn api_errors_carry_retry_after_on_non_json_body() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(
+            ResponseTemplate::new(503)
+                .insert_header("retry-after", "30")
+                .set_body_string("Service Unavailable"),
+        )
+        .mount(&server)
+        .await;
+
+    let err = client(&server)
+        .messages(&request())
+        .await
+        .expect_err("a 503 is an error");
+
+    let AntropologiaError::Api {
+        status,
+        ref error_type,
+        ref message,
+        retry_after,
+        ..
+    } = err
+    else {
+        anyhow::bail!("expected an API error, got {err:?}");
+    };
+    assert_eq!(status.as_u16(), 503);
+    assert_eq!(error_type, "unknown");
+    assert_eq!(message, "Service Unavailable");
+    assert_eq!(retry_after, Some(Duration::from_secs(30)));
     assert!(err.is_retryable());
     Ok(())
 }
@@ -163,7 +299,11 @@ async fn messages_stream_turns_error_events_into_errors() -> anyhow::Result<()> 
 
     assert!(matches!(
         first,
-        Err(AntropologiaError::Api { ref error_type, .. }) if error_type == "overloaded_error"
+        Err(AntropologiaError::Api {
+            ref error_type,
+            retry_after: None,
+            ..
+        }) if error_type == "overloaded_error"
     ));
     Ok(())
 }
